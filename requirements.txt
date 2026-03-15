@@ -1,5 +1,5 @@
-fastapi
-uvicorn
-rembg[cpu]  # CPU version only (free tier pe GPU nahi)
-pillow
-python-multipart  # File upload ke liye
+fastapi==0.104.1
+uvicorn==0.24.0
+rembg[cpu]==2.0.53
+Pillow==10.1.0
+python-multipart==0.0.6
