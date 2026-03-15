@@ -1,8 +1,11 @@
 services:
   - type: web
-    name: rembg-api
+    name: bg-remover-api
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
+    # Start command mein host aur port explicitly define karna best practice hai
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
-    autoDeploy: true  # Git push pe auto redeploy
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.0
