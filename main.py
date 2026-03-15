@@ -1,5 +1,6 @@
 import os
 import io
+import gc  # Memory cleanup ke liye
 import uvicorn
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import StreamingResponse
@@ -8,15 +9,14 @@ import rembg
 
 app = FastAPI(
     title="Background Removal API",
-    description="100% Free Background Removal API using rembg (CPU) and FastAPI",
+    description="Optimized for Render Free Tier (512MB RAM)",
     version="1.0.0"
 )
 
-# MEMORY FIX: Render free tier has 512MB RAM. 
-# Default 'u2net' model is heavy (~170MB). We use 'u2netp' (lighter, ~4MB).
-# Global session banaya hai taaki har request pe model reload na ho (warna RAM crash hogi).
+# Global session with smaller model
+print("Loading AI Model (u2netp) into memory...")
 try:
-    print("Loading AI Model into memory...")
+    # u2netp is only ~4MB compared to u2net's ~170MB
     session = rembg.new_session("u2netp")
     print("Model loaded successfully!")
 except Exception as e:
@@ -29,36 +29,38 @@ def read_root():
 
 @app.post("/remove-bg/")
 async def remove_background(file: UploadFile = File(...)):
-    # 1. File type validation
     if not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Uploaded file must be an image (PNG, JPG, etc.)")
+        raise HTTPException(status_code=400, detail="Uploaded file must be an image.")
     
     if session is None:
         raise HTTPException(status_code=500, detail="AI Model failed to load.")
 
     try:
-        # 2. Read image bytes
+        # Read image
         contents = await file.read()
         input_image = Image.open(io.BytesIO(contents)).convert("RGBA")
         
-        # 3. Process image using rembg with the lighter model session
+        # Process image
         output_image = rembg.remove(input_image, session=session)
         
-        # 4. Save output to bytes
+        # Save to buffer
         img_byte_arr = io.BytesIO()
         output_image.save(img_byte_arr, format="PNG")
         img_byte_arr.seek(0)
         
-        # 5. Return as StreamingResponse
+        # CLEAR MEMORY: Force Python to clear RAM immediately
+        del input_image
+        del output_image
+        del contents
+        gc.collect()
+        
         return StreamingResponse(img_byte_arr, media_type="image/png")
         
     except Exception as e:
-        # Error handling for processing fails
+        # Emergency memory cleanup in case of error
+        gc.collect()
         raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
 
-# PORT BINDING FIX FOR RENDER
 if __name__ == "__main__":
-    # Render environment variable se port leta hai, default 10000 agar na mile.
     port = int(os.environ.get("PORT", 10000))
-    # Host hamesha "0.0.0.0" hona chahiye external access ke liye
     uvicorn.run("main:app", host="0.0.0.0", port=port)
